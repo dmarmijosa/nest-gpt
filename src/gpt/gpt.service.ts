@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as cron from 'node-cron';
 import {
   orthographyCheckUseCase,
   prosConsDicusserStreamUseCase,
@@ -8,9 +9,13 @@ import {
   translateUseCase,
   textToAudioUseCase,
   audioToTextUseCase,
+  imageGenerationUseCase,
+  imageVariationUseCase,
 } from './use-cases';
 import {
   AudioToTextDto,
+  ImageGenerationDto,
+  ImageVariationsDto,
   OrthographyDto,
   ProsConsDiscusserDto,
   TextToAudioDto,
@@ -24,6 +29,10 @@ export class GptService {
   private openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
   });
+
+  constructor() {
+    cron;
+  }
 
   async ortographyCheck(orthographyDto: OrthographyDto) {
     return await orthographyCheckUseCase(this.openai, {
@@ -63,6 +72,55 @@ export class GptService {
     audioToTextDto: AudioToTextDto,
   ) {
     const { prompt } = audioToTextDto;
-    return await audioToTextUseCase(this.openai, { audioFile, prompt });
+    return audioToTextUseCase(this.openai, { audioFile, prompt });
+  }
+
+  async imageGeneration(imageGenerationDto: ImageGenerationDto) {
+    return await imageGenerationUseCase(this.openai, { ...imageGenerationDto });
+  }
+
+  getGenerationImage(filename: string) {
+    const filePatch = path.resolve('./', './generated/images/', filename);
+    const exist = fs.existsSync(filePatch);
+    if (!exist) throw new NotFoundException(`File not found`);
+    return filePatch;
+  }
+
+  async generateImageVariation({ baseImage }: ImageVariationsDto) {
+    return imageVariationUseCase(this.openai, { baseImage });
+  }
+
+  private deleteOldFiles(directory: string) {
+    const oneDayInMillis = 24 * 60 * 60 * 1000;
+    const now = Date.now();
+
+    fs.readdir(directory, (err, files) => {
+      if (err) {
+        console.error(`Error leyendo directorio ${directory}:`, err);
+        return;
+      }
+
+      files.forEach((file) => {
+        const filePath = path.join(directory, file);
+        fs.stat(filePath, (err, stats) => {
+          if (err) {
+            console.error(`Error obteniendo stats del archivo ${file}:`, err);
+            return;
+          }
+
+          // Eliminar el archivo si tiene más de un día de antigüedad
+          const ageInMillis = now - stats.mtime.getTime();
+          if (ageInMillis > oneDayInMillis) {
+            fs.unlink(filePath, (err) => {
+              if (err) {
+                console.error(`Error eliminando archivo ${file}:`, err);
+              } else {
+                console.log(`Archivo ${file} eliminado con éxito.`);
+              }
+            });
+          }
+        });
+      });
+    });
   }
 }
