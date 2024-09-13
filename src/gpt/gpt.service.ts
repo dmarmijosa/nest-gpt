@@ -31,7 +31,12 @@ export class GptService {
   });
 
   constructor() {
-    cron;
+    cron.schedule('0 0 */15 * *', () => {
+      console.log('Ejecutando eliminación de archivos temporales 15 días');
+      this.deleteOldFiles('./generated/audios/');
+      this.deleteOldFiles('./generated/images/');
+      this.deleteOldFiles('./generated/uploads/');
+    });
   }
 
   async ortographyCheck(orthographyDto: OrthographyDto) {
@@ -91,8 +96,15 @@ export class GptService {
   }
 
   private deleteOldFiles(directory: string) {
-    const oneDayInMillis = 24 * 60 * 60 * 1000;
+    const oneDayInMillis = 15 * 24 * 60 * 60 * 1000; // 1 minuto para pruebas
     const now = Date.now();
+
+    if (!fs.existsSync(directory)) {
+      console.error(`El directorio ${directory} no existe`);
+      return;
+    }
+
+    console.log(`Leyendo archivos en ${directory}`);
 
     fs.readdir(directory, (err, files) => {
       if (err) {
@@ -108,8 +120,9 @@ export class GptService {
             return;
           }
 
-          // Eliminar el archivo si tiene más de un día de antigüedad
           const ageInMillis = now - stats.mtime.getTime();
+          console.log(`Archivo: ${file}, Edad: ${ageInMillis}ms`);
+
           if (ageInMillis > oneDayInMillis) {
             fs.unlink(filePath, (err) => {
               if (err) {
@@ -118,9 +131,12 @@ export class GptService {
                 console.log(`Archivo ${file} eliminado con éxito.`);
               }
             });
+          } else {
+            console.log(`El archivo ${file} es reciente, no será eliminado.`);
           }
         });
       });
     });
   }
+
 }
